@@ -1,0 +1,41 @@
+---
+title: "gghighcharts"
+output: github_document
+---
+
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/ZhenyaKosovan/gghighcharts/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ZhenyaKosovan/gghighcharts/actions/workflows/R-CMD-check.yaml)
+<!-- badges: end -->
+
+gghighcharts converts a restricted subset of ggplot2 plots to highcharter widgets by inspecting the built ggplot.
+
+## Installation
+
+```r
+# install.packages("pak")
+pak::pak("ZhenyaKosovan/gghighcharts")
+```
+
+## Usage
+
+```r
+library(ggplot2)
+library(gghighcharts)
+
+p <- ggplot(mtcars, aes(wt, mpg)) + geom_point()
+hc_from_ggplot(p)
+```
+
+## Supported charts
+
+- Line charts: geom_line(), geom_step()
+- Scatter plots: geom_point()
+- Bar and column charts: geom_col(), geom_bar(), geom_histogram()
+- Area charts: geom_area(), geom_ribbon()
+- Statistical: geom_smooth(), geom_boxplot(), geom_errorbar()
+- Reference lines: geom_hline(), geom_vline()
+
+## Supported axes
+
+- X axis: discrete, numeric, Date, POSIXct
+- Y axis: numeric
