@@ -1,0 +1,500 @@
+---
+title: "Getting Started with gghighcharts"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with gghighcharts}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4
+)
+library(ggplot2)
+library(gghighcharts)
+```
+
+## Overview
+
+**gghighcharts** converts a subset of ggplot2 plots into interactive
+[Highcharts](https://www.highcharts.com/) widgets via the
+[highcharter](https://jkunst.com/highcharter/) package.
+
+The translation pipeline works on the **built plot** — it calls
+`ggplot_build()` internally and reads the computed data positions, axis
+breaks, and labels. This means that stats, position adjustments, and
+scale transformations that ggplot2 has already resolved are carried
+through automatically.
+
+## Basic Usage
+
+The main function is `hc_from_ggplot()`. Pass it any supported ggplot
+object and receive a highcharter widget.
+
+```{r scatter-basic}
+p <- ggplot(mtcars, aes(wt, mpg)) +
+  geom_point() +
+  labs(title = "Motor Trend Cars", x = "Weight (1000 lbs)", y = "MPG")
+
+hc_from_ggplot(p)
+```
+
+You can also use the S3 method `as_highchart()`:
+
+```{r scatter-s3, eval = FALSE}
+as_highchart(p)
+```
+
+## Scatter Plots
+
+Scatter plots (`geom_point()`) are translated to Highcharts `scatter`
+series. Marker size is approximated from the ggplot2 `size` aesthetic.
+
+```{r scatter-colour}
+p <- ggplot(mtcars, aes(wt, mpg, colour = factor(cyl))) +
+  geom_point(size = 3) +
+  labs(title = "MPG by Weight and Cylinders",
+       x = "Weight", y = "Miles per Gallon")
+
+hc_from_ggplot(p)
+```
+
+## Line Charts
+
+Line charts (`geom_line()`) are translated to Highcharts `line` series.
+Multiple groups produce multiple series, each with its own colour.
+
+```{r line-basic}
+df <- data.frame(
+  x = rep(1:20, 3),
+  y = c(cumsum(rnorm(20)), cumsum(rnorm(20)), cumsum(rnorm(20))),
+  group = rep(c("A", "B", "C"), each = 20)
+)
+
+p <- ggplot(df, aes(x, y, colour = group)) +
+  geom_line() +
+  labs(title = "Random Walks")
+
+hc_from_ggplot(p)
+```
+
+### Handling NA Values
+
+Missing values in y produce gaps in the line, matching ggplot2 behaviour.
+
+```{r line-na}
+df <- data.frame(
+  x = 1:10,
+  y = c(1, 3, 2, NA, 5, 4, NA, 7, 6, 8)
+)
+
+p <- ggplot(df, aes(x, y)) + geom_line()
+hc_from_ggplot(p, title = "Line with Gaps")
+```
+
+## Bar / Column Charts
+
+`geom_col()` (and `geom_bar(stat = "identity")`) are translated to
+Highcharts `column` series. Discrete x axes become Highcharts categories.
+
+```{r bar-basic}
+df <- data.frame(
+  fruit = c("Apple", "Banana", "Cherry", "Date"),
+  count = c(40, 25, 35, 15)
+)
+
+p <- ggplot(df, aes(fruit, count)) +
+  geom_col() +
+  labs(title = "Fruit Counts")
+
+hc_from_ggplot(p)
+```
+
+### Grouped Bars
+
+When `fill` maps to a grouping variable, multiple series are created.
+
+```{r bar-grouped}
+df <- data.frame(
+  category = rep(c("Q1", "Q2", "Q3", "Q4"), 2),
+  revenue = c(100, 120, 90, 150, 80, 110, 95, 130),
+  product = rep(c("Widget", "Gadget"), each = 4)
+)
+
+p <- ggplot(df, aes(category, revenue, fill = product)) +
+  geom_col(position = "dodge") +
+  labs(title = "Quarterly Revenue by Product")
+
+hc_from_ggplot(p)
+```
+
+## Date Axes
+
+Date and datetime x axes are converted to Highcharts `datetime` type.
+Tick labels computed by ggplot2 (including `date_labels` formatting) are
+preserved via a JavaScript label map.
+
+```{r date-axis}
+df <- data.frame(
+  date = as.Date("2023-01-01") + seq(0, 364, by = 7),
+  value = cumsum(rnorm(53))
+)
+
+p <- ggplot(df, aes(date, value)) +
+  geom_line() +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  labs(title = "Weekly Time Series", x = "Date", y = "Value")
+
+hc_from_ggplot(p)
+```
+
+## Numeric Scale Transformations
+
+Log, sqrt, reverse, and other continuous transformations applied via
+ggplot2 scales are respected. The translation uses the built data
+positions and the ggplot2-computed break labels, so the Highcharts
+output shows the same tick marks.
+
+```{r log-scale}
+df <- data.frame(x = c(1, 10, 100, 1000, 10000),
+                 y = c(5, 4, 3, 2, 1))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_point(size = 3) +
+  scale_x_log10() +
+  labs(title = "Log10 X Scale")
+
+hc_from_ggplot(p)
+```
+
+## Overriding Title and Subtitle
+
+You can override the title and subtitle without modifying the ggplot
+object:
+```{r title-override}
+p <- ggplot(mtcars, aes(wt, mpg)) + geom_point()
+hc_from_ggplot(p, title = "My Custom Title", subtitle = "A subtitle")
+```
+
+## Combining Layers
+
+You can combine supported geom layers in a single plot. For example, a
+line chart with point markers:
+
+```{r combined}
+df <- data.frame(x = 1:10, y = c(3, 1, 4, 1, 5, 9, 2, 6, 5, 3))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_line() +
+  geom_point(size = 3) +
+  labs(title = "Line + Points")
+
+hc_from_ggplot(p)
+```
+
+## Shared Tooltip
+
+By default, `tooltip_shared = TRUE` enables Highcharts shared tooltip,
+which shows values for all series at the hovered x position. Set to
+`FALSE` for per-point tooltips:
+
+```{r tooltip, eval = FALSE}
+hc_from_ggplot(p, tooltip_shared = FALSE)
+```
+
+## Stacked and Dodged Bars
+
+Position adjustments for bar charts are supported. `position = "stack"`
+(the default for `geom_col()`) produces stacked bars, `position = "fill"`
+produces 100% stacked bars, and `position = "dodge"` produces grouped bars.
+
+```{r bar-stacked}
+df <- data.frame(
+  quarter = rep(c("Q1", "Q2", "Q3", "Q4"), 2),
+  revenue = c(100, 120, 90, 150, 80, 110, 95, 130),
+  product = rep(c("Widget", "Gadget"), each = 4)
+)
+
+p <- ggplot(df, aes(quarter, revenue, fill = product)) +
+  geom_col(position = "stack") +
+  labs(title = "Stacked Revenue")
+
+hc_from_ggplot(p)
+```
+
+## Area Charts
+
+`geom_area()` is translated to Highcharts `area` series.
+
+```{r area}
+df <- data.frame(x = 1:20, y = cumsum(abs(rnorm(20))))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_area(fill = "steelblue", alpha = 0.5) +
+  labs(title = "Cumulative Area")
+
+hc_from_ggplot(p)
+```
+
+## Step Charts
+
+`geom_step()` is translated to a Highcharts line series with `step` enabled.
+
+```{r step}
+df <- data.frame(x = 1:10, y = c(3, 5, 2, 4, 6, 1, 7, 3, 8, 5))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_step() +
+  labs(title = "Step Chart")
+
+hc_from_ggplot(p)
+```
+
+## Smooth Lines (geom_smooth)
+
+`geom_smooth()` is translated to a fitted line with an optional
+confidence band rendered as an arearange series.
+
+```{r smooth}
+p <- ggplot(mtcars, aes(wt, mpg)) +
+  geom_point() +
+  geom_smooth() +
+  labs(title = "Scatter with Smooth Fit")
+
+hc_from_ggplot(p)
+```
+
+## Reference Lines
+
+`geom_hline()` and `geom_vline()` are rendered as Highcharts
+plotLines on the appropriate axis.
+
+```{r reference-lines}
+df <- data.frame(x = 1:10, y = c(3, 1, 4, 1, 5, 9, 2, 6, 5, 3))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_line() +
+  geom_hline(yintercept = 5, linetype = "dashed", colour = "red") +
+  geom_vline(xintercept = 5, linetype = "dotted", colour = "blue") +
+  labs(title = "With Reference Lines")
+
+hc_from_ggplot(p)
+```
+
+## Histograms
+
+`geom_histogram()` and `geom_bar(stat = "count")` are supported.
+The stat computation is done by ggplot2; gghighcharts reads the result.
+
+```{r histogram}
+p <- ggplot(mtcars, aes(mpg)) +
+  geom_histogram(bins = 12, fill = "steelblue") +
+  labs(title = "MPG Distribution")
+
+hc_from_ggplot(p)
+```
+
+## Box Plots
+
+`geom_boxplot()` is translated to a Highcharts boxplot series.
+Outliers are shown as a separate scatter series.
+
+```{r boxplot}
+p <- ggplot(mtcars, aes(factor(cyl), mpg)) +
+  geom_boxplot() +
+  labs(title = "MPG by Cylinders", x = "Cylinders")
+
+hc_from_ggplot(p)
+```
+
+## Error Bars
+
+`geom_errorbar()` is translated to a Highcharts errorbar series.
+
+```{r errorbar}
+df <- data.frame(
+  treatment = c("Control", "Low", "High"),
+  mean = c(10, 15, 22),
+  se = c(1.5, 2.0, 1.8)
+)
+
+p <- ggplot(df, aes(treatment, mean)) +
+  geom_col(fill = "steelblue") +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.3) +
+  labs(title = "Treatment Effects with Error Bars")
+
+hc_from_ggplot(p)
+```
+
+## coord_flip() Support
+
+`coord_flip()` is supported — it produces an inverted Highcharts chart
+with horizontal bars:
+
+```{r coord-flip}
+df <- data.frame(
+  item = c("A", "B", "C", "D"),
+  value = c(30, 50, 20, 40)
+)
+
+p <- ggplot(df, aes(item, value)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Horizontal Bars")
+
+hc_from_ggplot(p)
+```
+
+## Linetype and Shape Mapping
+
+ggplot2 linetypes are mapped to Highcharts dash styles, and point
+shapes are mapped to Highcharts marker symbols.
+
+```{r linetype}
+df <- data.frame(
+  x = rep(1:10, 2),
+  y = c(cumsum(rnorm(10)), cumsum(rnorm(10))),
+  group = rep(c("Solid", "Dashed"), each = 10)
+)
+
+p <- ggplot(df, aes(x, y, colour = group, linetype = group)) +
+  geom_line(linewidth = 1) +
+  scale_linetype_manual(values = c("solid", "dashed")) +
+  labs(title = "Lines with Different Styles")
+
+hc_from_ggplot(p)
+```
+
+## Continuous Colour and Size
+
+When `colour` or `size` maps to a continuous variable, each point
+receives its own colour or marker radius rather than creating separate
+series.
+
+```{r continuous-colour}
+p <- ggplot(mtcars, aes(wt, mpg, colour = hp, size = disp)) +
+  geom_point() +
+  labs(title = "Per-point Colour and Size",
+       colour = "Horsepower", size = "Displacement")
+
+hc_from_ggplot(p)
+```
+
+## Theme Translation
+
+A subset of ggplot2 theme elements are translated to Highcharts styling:
+background colour, grid lines, axis text, title style, font family,
+and legend position.
+
+```{r theme}
+p <- ggplot(mtcars, aes(wt, mpg, colour = factor(cyl))) +
+  geom_point(size = 3) +
+  labs(title = "Dark Themed Chart") +
+  theme(
+    panel.background = element_rect(fill = "#2d2d2d"),
+    panel.grid.major = element_line(colour = "#444444"),
+    panel.grid.minor = element_blank(),
+    axis.text = element_text(colour = "#cccccc", size = 11),
+    plot.title = element_text(colour = "white", size = 16, face = "bold"),
+    text = element_text(family = "sans"),
+    legend.position = "bottom"
+  )
+
+hc_from_ggplot(p)
+```
+
+## Annotations
+
+`annotate("text")` and `annotate("rect")` are translated to Highcharts
+annotations and plot bands.
+
+```{r annotations}
+df <- data.frame(x = 1:10, y = c(3, 1, 4, 1, 5, 9, 2, 6, 5, 3))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_line() +
+  annotate("rect", xmin = 3, xmax = 7, ymin = 0, ymax = 10,
+           alpha = 0.1, fill = "blue") +
+  annotate("text", x = 5, y = 9.5, label = "Region of Interest") +
+  labs(title = "Chart with Annotations")
+
+hc_from_ggplot(p)
+```
+
+## Tooltip Customization
+
+By default, hovering over a data point shows the series name and y
+value. You can customize the tooltip in several ways.
+
+### Custom Point Format
+
+Use `tooltip_format` to provide a Highcharts `pointFormat` template
+string:
+
+```{r tooltip-format}
+p <- ggplot(mtcars, aes(wt, mpg)) +
+  geom_point() +
+  labs(title = "Custom Tooltip Format")
+
+hc_from_ggplot(p, tooltip_format = "<b>Weight:</b> {point.x:.1f}<br/><b>MPG:</b> {point.y:.1f}")
+```
+
+### Custom Hover Text via `aes(text = ...)`
+
+Map a `text` aesthetic to add per-point hover information. When `text`
+is present, the tooltip automatically includes `{point.text}`:
+
+```{r tooltip-text}
+df <- data.frame(
+  x = c(1, 2, 3, 4, 5),
+  y = c(10, 20, 15, 25, 30),
+  label = c("Start", "Peak A", "Dip", "Peak B", "End")
+)
+
+p <- ggplot(df, aes(x, y, text = label)) +
+  geom_point(size = 3) +
+  labs(title = "Hover Text from aes(text = ...)")
+
+hc_from_ggplot(p)
+```
+
+### Full JavaScript Formatter
+
+For complete control, pass a JS function via `tooltip_formatter`:
+
+```{r tooltip-formatter, eval = FALSE}
+hc_from_ggplot(p,
+  tooltip_formatter = htmlwidgets::JS(
+    "function() {
+       return '<b>' + this.series.name + '</b><br/>' +
+              'X: ' + Highcharts.numberFormat(this.x, 2) + '<br/>' +
+              'Y: ' + Highcharts.numberFormat(this.y, 2);
+     }"
+  )
+)
+```
+
+## Animation Control
+
+By default, Highcharts animates series on initial render. You can
+control this with the `animation` parameter:
+
+```{r animation-off}
+df <- data.frame(x = 1:20, y = cumsum(rnorm(20)))
+
+p <- ggplot(df, aes(x, y)) +
+  geom_line() +
+  labs(title = "No Animation")
+
+hc_from_ggplot(p, animation = FALSE)
+```
+
+Set a custom animation duration in milliseconds:
+
+```{r animation-slow, eval = FALSE}
+hc_from_ggplot(p, animation = 3000)  # 3-second animation
+```

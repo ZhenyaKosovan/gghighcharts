@@ -1,0 +1,25 @@
+Package: gghighcharts
+Title: Convert ggplot2 Plots to Highcharts Widgets
+Version: 0.1.0
+Authors@R: person("Zhenya", "Kosovan", role = c("aut", "cre"),
+                  email = "yevhen.kosovan@outlook.com")
+Description: Translates a restricted subset of ggplot2 plots into interactive
+    highcharter widgets. Works by inspecting the built plot (via ggplot_build())
+    rather than parsing user source code. Supports line, scatter, and bar/column
+    charts with numeric, discrete, and date axes.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    ggplot2 (>= 3.4.0),
+    highcharter (>= 0.9.4),
+    htmlwidgets,
+    rlang,
+    jsonlite
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr

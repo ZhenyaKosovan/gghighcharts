@@ -1,0 +1,261 @@
+---
+title: "Supported and Unsupported Features"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Supported and Unsupported Features}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Feature Support Matrix
+
+This document is the definitive reference for what gghighcharts can and
+cannot translate. The package deliberately targets a restricted subset of
+ggplot2; features outside this subset either raise an error or are
+silently dropped (with an optional warning).
+
+---
+
+## Supported Features
+
+### Geoms
+
+| ggplot2 geom | Highcharts type | Notes |
+|:---|:---|:---|
+| `geom_point()` | `scatter` | Marker radius from `size`; symbol from `shape` |
+| `geom_line()` | `line` | `NA` y values produce gaps |
+| `geom_path()` | `line` | Points kept in original order |
+| `geom_col()` | `column` | Discrete x mapped to categories |
+| `geom_bar(stat = "identity")` | `column` | Same as `geom_col()` |
+| `geom_bar(stat = "count")` | `column` | Counts computed by ggplot2 |
+| `geom_histogram()` | `column` | Bins computed by ggplot2; bin width set via `pointRange` |
+| `geom_area()` | `area` | Filled area chart |
+| `geom_step()` | `line` + `step` | Step direction mapped (`hv`→left, `vh`→right, `mid`→center) |
+| `geom_smooth()` | `line` + `arearange` | Fitted line + confidence band |
+| `geom_hline()` | y-axis `plotLines` | Horizontal reference lines |
+| `geom_vline()` | x-axis `plotLines` | Vertical reference lines |
+| `geom_boxplot()` | `boxplot` | Five-number summary + outliers as scatter |
+| `geom_errorbar()` | `errorbar` | Error bars (low/high) |
+| `geom_ribbon()` | `arearange` | Filled range between ymin and ymax |
+
+### Axes
+
+| X axis type | Detection | Highcharts type |
+|:---|:---|:---|
+| Discrete (factor / character) | Scale class or built data | `category` with `categories` array |
+| Numeric (continuous) | Default | `linear` (default Highcharts) |
+| Date (`Date`) | `ScaleContinuousDate` | `datetime` (ms since epoch) |
+| Datetime (`POSIXct`) | `ScaleContinuousDatetime` | `datetime` (ms since epoch) |
+
+Y axis is always numeric (continuous).
+
+### Scale Transformations
+
+Transformations applied via ggplot2 scales are handled through **visual
+positions** — the package reads the already-transformed data from
+`ggplot_build()` rather than re-implementing the transformation. This
+means:
+
+- `scale_x_log10()` / `scale_y_log10()` — works
+- `scale_*_continuous(trans = "sqrt")` — works
+- `scale_*_continuous(trans = "reverse")` — works
+- Custom `trans` objects — works (as long as ggplot2 computes the
+  breaks and labels)
+
+Tick labels are replicated via a value-to-label JavaScript map so that
+Highcharts displays the same labels ggplot2 would.
+
+**Limitation**: If a custom label function produces output that depends
+on context beyond the break values (e.g., adaptive formatting based on
+range), the static label map may not cover all Highcharts auto-generated
+ticks.
+
+### Position Adjustments
+
+| Position | Behaviour |
+|:---|:---|
+| `position_stack()` | Highcharts `stacking = "normal"` applied; raw segment values extracted |
+| `position_fill()` | Highcharts `stacking = "percent"` applied |
+| `position_dodge()` | Multiple column series; Highcharts groups automatically |
+| `position_identity()` | Default for most geoms |
+
+### Aesthetic Mappings
+
+| Aesthetic | Translation | Notes |
+|:---|:---|:---|
+| `colour` / `fill` (discrete) | Per-series `color` | Hex colours from built data; one series per group |
+| `colour` / `fill` (continuous) | Per-point `color` | Each data point gets its own colour from the gradient |
+| `size` (point, constant) | `marker.radius` | Approximated: ggplot mm * 1.5 |
+| `size` (point, continuous) | Per-point `marker.radius` | Each point gets its own radius |
+| `size` / `linewidth` (line) | `lineWidth` | Approximated: ggplot mm * 2 |
+| `shape` | `marker.symbol` | Mapped from ggplot2 shapes 0-25 to `circle`, `square`, `diamond`, `triangle`, `triangle-down` |
+| `linetype` | `dashStyle` | Mapped: `solid`, `dashed`, `dotted`, `dotdash`, `longdash`, `twodash` |
+| `alpha` | `opacity` | Per-series opacity when constant within series |
+
+### Grouping
+
+- Multiple series per layer via the `group` aesthetic
+- Fallback grouping by `colour` or `fill` when `group` is constant but
+  the colour/fill aesthetic varies
+- Series are named using the original factor levels or aesthetic labels
+  when available
+
+### Coordinates
+
+| Coordinate system | Status |
+|:---|:---|
+| `coord_cartesian()` (default) | Supported |
+| `coord_cartesian(xlim, ylim)` | Supported (axis min/max propagated to Highcharts) |
+| `coord_flip()` | Supported (uses `chart.inverted = TRUE`) |
+
+### Theme Translation
+
+| ggplot2 theme element | Highcharts option |
+|:---|:---|
+| `panel.background` fill | `chart.backgroundColor` |
+| `plot.background` fill | `chart.plotBackgroundColor` |
+| `panel.grid.major` colour/width | `yAxis.gridLineColor/Width` |
+| `panel.grid.minor` colour/width | `yAxis.minorGridLineColor/Width` |
+| `element_blank()` on grid | Grid lines disabled (width = 0) |
+| `axis.text` colour/size | `xAxis/yAxis.labels.style` |
+| `plot.title` colour/size/face | `title.style` |
+| `text` family | `chart.style.fontFamily` |
+| `legend.position` | `legend.align/verticalAlign/layout` |
+| `legend.position = "none"` | `legend.enabled = FALSE` |
+
+### Annotations
+
+| annotate() type | Highcharts equivalent |
+|:---|:---|
+| `annotate("text", ...)` | Highcharts annotations API (labels at x/y) |
+| `annotate("rect", ...)` | `xAxis.plotBands` |
+
+### Other
+
+- **Title / subtitle**: from `labs(title = ..., subtitle = ...)` or
+  overridden via `hc_from_ggplot(p, title = ..., subtitle = ...)`
+- **Axis titles**: from `labs(x = ..., y = ...)`
+- **Tooltip customization**:
+  - `tooltip_shared` argument controls shared vs per-point tooltip (default `TRUE`)
+  - `tooltip_format` accepts a Highcharts `pointFormat` template string
+  - `tooltip_formatter` accepts a `htmlwidgets::JS()` function for full control
+  - `aes(text = ...)` adds per-point hover text; auto-included in tooltip via `{point.text}`
+- **Animation control**: `animation` argument accepts `TRUE` (default), `FALSE`, or a numeric duration in milliseconds
+- **Multiple layers**: you can combine supported geoms (e.g.,
+  `geom_line() + geom_point()`) and each becomes a separate Highcharts
+  series
+
+---
+
+## Unsupported Features
+
+### Features that raise errors
+
+These features are detected during validation and produce a clear error
+message. The plot is **not** partially rendered.
+
+| Feature | Error message | Why |
+|:---|:---|:---|
+| **Facets** (`facet_wrap()`, `facet_grid()`) | "Faceted plots are not supported" | Highcharts has no native facet equivalent; would require multiple chart instances |
+| **Non-cartesian coords** (`coord_polar()`, `coord_sf()`, `coord_map()`, `coord_trans()`) | "Unsupported coordinate system" | These fundamentally change the geometry rendering model |
+| **Unsupported geoms** (see list below) | "Unsupported geom in layer N" | No translation logic implemented |
+| **Empty plots** (no layers) | "Plot has no layers" | Nothing to translate |
+
+#### Unsupported geom list (non-exhaustive)
+
+Every geom not listed in the "Supported" section above will trigger an
+error. Common ones users may encounter:
+
+- `geom_violin()` — violin plots
+- `geom_density()` — kernel density estimation
+- `geom_tile()` / `geom_raster()` — heatmaps
+- `geom_text()` / `geom_label()` — text annotations
+- `geom_segment()` / `geom_curve()` — line segments
+- `geom_polygon()` / `geom_sf()` — polygon / spatial geometries
+- `geom_contour()` / `geom_hex()` — 2D density / hexbins
+- `geom_jitter()` — this is a position adjustment on `geom_point()` and
+  may work if the underlying class is `GeomPoint`, but is not tested
+- `geom_abline()` — diagonal reference lines (not yet implemented)
+
+### Features that are silently dropped (with warning)
+
+When `warn_unsupported = TRUE` (the default), these produce a warning
+but do not prevent translation. The resulting Highcharts widget simply
+ignores them.
+
+| Feature | What happens |
+|:---|:---|
+| **Unmapped aesthetics** (e.g., `fontface`) | Warning emitted; aesthetic ignored |
+| **Theme elements not listed above** | Ignored (e.g., `strip.*`, `axis.ticks`, `panel.border`) |
+| **Guide configuration** (`guides()`, `guide_legend()`, `guide_colourbar()`) | Ignored |
+| **Secondary axes** (`sec_axis()`) | Ignored |
+| **Expansion** (`expand` in scales) | Ignored; Highcharts uses its own padding |
+
+### Features that produce different output (no warning)
+
+These are ggplot2 features where the translation will succeed but the
+Highcharts output may look different from the ggplot2 rendering:
+
+| Feature | Behaviour |
+|:---|:---|
+| **Colour scales** (`scale_colour_brewer()`, `scale_fill_viridis_d()`, etc.) | Colours from the built data are used per-series; gradient colour scales on continuous variables are not translated. |
+| **Size variation** (continuous size aesthetic) | If `size` varies within a series, only one marker size is used. Per-point sizing is not implemented. |
+| **Per-point alpha** | If `alpha` varies within a series, only one value is used. |
+| **Per-point shape** | If `shape` varies within a series, only one symbol is used. |
+
+---
+
+## Diagnostic Tips
+
+### Checking what will be translated
+
+You can inspect the built data to understand what gghighcharts sees:
+
+```{r diagnostic, eval = FALSE}
+p <- ggplot(mtcars, aes(wt, mpg, colour = factor(cyl))) + geom_point()
+
+b <- ggplot_build(p)
+
+# Built data for layer 1:
+head(b$data[[1]])
+
+# Panel parameters (axis info):
+str(b$layout$panel_params[[1]], max.level = 2)
+```
+
+### Warning control
+
+To suppress warnings about dropped features:
+
+```{r suppress-warn, eval = FALSE}
+hc_from_ggplot(p, warn_unsupported = FALSE)
+```
+
+### Debugging series names
+
+If series names show as "Series 1", "Series 2" instead of meaningful
+labels, this usually means the colour/fill scale doesn't have discrete
+levels that gghighcharts can read. Ensure your grouping variable is a
+factor or that you use a discrete colour scale.
+
+---
+
+## Roadmap
+
+Features planned for future versions:
+
+- `geom_abline()` — diagonal reference lines
+- `geom_density()` — kernel density curves
+- Continuous colour scales with `colorAxis`
+- Per-point variable sizing for scatter plots
+- Secondary axes (`sec_axis()`)
+- Limited theme adapter (grid lines, background colour, fonts)
+- Legend position mapping
+- Facet support (multiple linked chart widgets)
